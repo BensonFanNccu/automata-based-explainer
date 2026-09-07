@@ -1,0 +1,114 @@
+
+################ 1
+$ RUNNING.md regular command, verbatim
+[WARNING] ExplainLanguage not available at module import: No module named 'language'
+Traceback (most recent call last):
+  File "/home/fbi0826/automata-based-explainer/examples/RPNI/run_regular_experiment.py", line 375, in <module>
+    main()
+  File "/home/fbi0826/automata-based-explainer/examples/RPNI/run_regular_experiment.py", line 321, in main
+    raise FileExistsError(
+FileExistsError: Output root already exists: /home/fbi0826/automata-based-explainer/test_result/regular_0.8_1000
+Refusing to run into an existing results folder (would overwrite prior results). Pass --output_suffix to pick a different folder, or remove/move the existing one first if you intend to replace it.
+exit=1
+
+################ 2
+$ RUNNING.md real-world command, verbatim
+[WARNING] ExplainLanguage not available at module import: No module named 'language'
+Traceback (most recent call last):
+  File "/home/fbi0826/automata-based-explainer/examples/RPNI/run_realworld_experiment.py", line 341, in <module>
+    main()
+  File "/home/fbi0826/automata-based-explainer/examples/RPNI/run_realworld_experiment.py", line 286, in main
+    raise FileExistsError(
+FileExistsError: Output root already exists: /home/fbi0826/automata-based-explainer/test_result/realworld_0.8_1000
+Refusing to run into an existing results folder (would overwrite prior results). Pass --output_suffix to pick a different folder, or remove/move the existing one first if you intend to replace it.
+exit=1
+
+################ 3
+$ scaled-down regular run with --output_suffix (SecureHandshake only)
+======================================================================
+  Regular Automata DFA Search Experiment
+  Selected automata: SecureHandshake
+  Agreement threshold: 0.8
+  Batch size: 200
+  Output directory: /home/fbi0826/automata-based-explainer/test_result/regular_0.8_200_smoke
+======================================================================
+
+
+======================================================================
+  AUTOMATA: SecureHandshake
+======================================================================
+  [TEACHER] Loading automata DFA: secure_handshake.dot
+  DFA: 33 states, alphabet={'retry', 'verify', 'cert', 'key', 'ack', 'hello', 'alert'}
+  Selected test instances: 1
+    [00] len=11 label=1 seq=['hello', 'cert', 'verify', 'key', 'ack', 'key', 'ack', 'cert', 'verify', 'key', 'ack']
+
+[RUN SEARCH SUITE] methods=('beam', 'sa', 'ga', 'pso')  output_dir=/home/fbi0826/automata-based-explainer/test_result/regular_0.8_200_smoke/SecureHandshake/instance_00
+  [ERROR] Initial DFA construction failed after 40 attempts: state counts tried=[14, 12, 16, 14, 12, 19, 15, 12, 18, 12, 11, 17, 16, 11, 15, 17, 11, 12, 17, 15, 13, 16, 18, 13, 11, 14, 11, 13, 15, 18, 14, 12, 16, 17, 14, 10, 16, 16, 10, 17], required range=[25, 65]
+
+[ERROR] SecureHandshake_instance_00: Beam search did not produce an initial DFA.
+[TRACEBACK]
+Traceback (most recent call last):
+  File "/home/fbi0826/automata-based-explainer/examples/RPNI/run_regular_experiment.py", line 229, in run_one_automata
+    all_instance_results[result_key] = run_search_suite(
+                                       ^^^^^^^^^^^^^^^^^
+  File "/home/fbi0826/automata-based-explainer/src/experiments/runner.py", line 325, in run_search_suite
+    shared = build_shared_init(beam_search, beam_raw, cfg)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fbi0826/automata-based-explainer/src/experiments/runner.py", line 131, in build_shared_init
+    raise ValueError("Beam search did not produce an initial DFA.")
+ValueError: Beam search did not produce an initial DFA.
+
+================================================================================
+SecureHandshake_instance_00
+================================================================================
+[NO DATA] This instance failed or was skipped.
+
+======================================================================
+  Experiment Parameters
+======================================================================
+  Selected automata: SecureHandshake
+
+  [SecureHandshake]
+    agreement_threshold: 0.8
+    batch_size: 200
+    beam_size: 1
+    delta: 0.01
+    edit_distance: 7
+    init_num_samples: 200
+    max_evaluations: 150
+    n_jobs: 4
+    num_test_instances: 5
+    parallel: True
+    prediction_cache_max_size: 200000
+    tau: 0.1
+    use_prediction_cache: True
+======================================================================
+
+Full log → /home/fbi0826/automata-based-explainer/test_result/regular_0.8_200_smoke/experiment_log.txt
+exit=0
+--- files produced ---
+test_result/regular_0.8_200_smoke/experiment_log.txt
+
+################ 4
+$ analysis/parse_results.py
+Traceback (most recent call last):
+  File "/home/fbi0826/automata-based-explainer/analysis/parse_results.py", line 129, in <module>
+    main()
+  File "/home/fbi0826/automata-based-explainer/analysis/parse_results.py", line 105, in main
+    for entry in sorted(os.listdir(FINAL_RESULT_DIR)):
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/home/fbi0826/automata-based-explainer/test_result/final_result'
+exit=1
+
+################ 5
+$ analysis/make_plots.py
+    main()
+  File "/home/fbi0826/automata-based-explainer/analysis/make_plots.py", line 436, in main
+    rows = load_rows()
+           ^^^^^^^^^^^
+  File "/home/fbi0826/automata-based-explainer/analysis/make_plots.py", line 73, in load_rows
+    with open(CSV_PATH, newline="", encoding="utf-8") as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/home/fbi0826/automata-based-explainer/analysis/summary_table.csv'
+exit=1
+SMOKE DONE Mon Sep  7 10:48:13 AM CST 2026

@@ -1,0 +1,187 @@
+
+======================================================================
+  AUTOMATA: SecureHandshake
+======================================================================
+  [TEACHER] Loading automata DFA: secure_handshake.dot
+  DFA: 33 states, alphabet={'hello', 'ack', 'key', 'retry', 'cert', 'alert', 'verify'}
+  Selected test instances: 1
+    [00] len=11 label=1 seq=['hello', 'cert', 'verify', 'key', 'ack', 'key', 'ack', 'cert', 'verify', 'key', 'ack']
+
+[RUN SEARCH SUITE] methods=('beam', 'sa', 'ga', 'pso')  output_dir=/home/fbi0826/automata-based-explainer/test_result/regular_0.8_1000_smoke2/SecureHandshake/instance_00
+--------------------------------------------
+[Beam Iter 0] op=INIT, candidates=1, valid=1, evaluations=1/100
+[Beam Iter 0] selected=1, best_agreement=0.8240, best_states=39, n_samples=[1000]
+  [MATA] Wrote 273 transitions to /home/fbi0826/automata-based-explainer/test_result/regular_0.8_1000_smoke2/SecureHandshake/instance_00/beam/dfa_explicit.mata
+[Beam Iter 1] op=DELTA, candidates=1, valid=1, evaluations=2/100
+[Beam Iter 1] selected=1, best_agreement=0.8240, best_states=39, n_samples=[1000]
+[Beam Iter 2] op=DELETE+MERGE, candidates=40, valid=40, evaluations=42/100
+[Beam Iter 2] selected=1, best_agreement=0.8343, best_states=38, n_samples=[4001]
+  [MATA] Wrote 266 transitions to /home/fbi0826/automata-based-explainer/test_result/regular_0.8_1000_smoke2/SecureHandshake/instance_00/beam/dfa_explicit.mata
+[Beam Iter 3] op=DELTA, candidates=1, valid=1, evaluations=43/100
+[Beam Iter 3] selected=1, best_agreement=0.8343, best_states=38, n_samples=[4001]
+[Beam Iter 4] op=DELETE+MERGE, candidates=40, valid=40, evaluations=83/100
+[Beam Iter 4] selected=1, best_agreement=0.8280, best_states=37, n_samples=[5001]
+  [MATA] Wrote 259 transitions to /home/fbi0826/automata-based-explainer/test_result/regular_0.8_1000_smoke2/SecureHandshake/instance_00/beam/dfa_explicit.mata
+[Beam Iter 5] op=DELTA, candidates=1, valid=1, evaluations=84/100
+[Beam Iter 5] selected=1, best_agreement=0.8280, best_states=37, n_samples=[5001]
+[Beam Iter 6] op=DELETE+MERGE, candidates=16, valid=16, evaluations=100/100
+[Beam Iter 6] selected=1, best_agreement=0.8280, best_states=36, n_samples=[4001]
+[Beam] Budget exhausted: 100 >= 100
+  [SharedInit] Saved to /home/fbi0826/automata-based-explainer/test_result/regular_0.8_1000_smoke2/SecureHandshake/instance_00/shared/shared_init.pkl (39 states, 1000 training samples, 1000 validation samples)
+======================================================================
+[SA] Initialising Simulated Annealing…
+[Init] Using shared init: 39 states, 1000 validation samples, 1000 training samples
+[SA] Running 500 steps with T_max=10.0, T_min=0.001, candidate_pool=10 (budget=100)
+[SA] Initial DFA: 39 states, initial training agreement: 0.8240
+  [SA-iter1] NEW best from pool(10): agreement=0.8230, states=37, evals: 10/100
+  [SA-iter2] NEW best from pool(10): agreement=0.8260, states=36, evals: 20/100
+  [SA-iter3] NEW best from pool(10): agreement=0.8280, states=34, evals: 30/100
+  [SA-iter4] NEW best from pool(10): agreement=0.8340, states=33, evals: 40/100
+  [SA-iter5] NEW best from pool(10): agreement=0.8330, states=32, evals: 50/100
+  [SA-iter6] NEW best from pool(10): agreement=0.8340, states=31, evals: 60/100
+  [SA-iter7] NEW best from pool(10): agreement=0.8400, states=30, evals: 70/100
+  [SA-iter8] NEW best from pool(10): agreement=0.8420, states=29, evals: 80/100
+  [SA-iter9] NEW best from pool(10): agreement=0.8500, states=28, evals: 90/100
+  [SA-iter10] NEW best from pool(10): agreement=0.8500, states=27, evals: 100/100
+[SA] Budget exhausted: 100 >= 100
+[SA] Completed 100 evaluations
+[SA] Best DFA: 27 states, Best agreement: 0.8500
+[SA] Operator summary | evaluations=100/100
+  DELETE :    36 (36.00%)
+  MERGE  :    29 (29.00%)
+  DELTA  :    35 (35.00%)
+
+[SELECT] select_by='agreement', agreement_threshold=0.8, state_threshold=5
+  Total candidates in history: 101
+  Initial states (from shared_init): 39
+  [agreement mode] 85 candidate(s) meet training_agreement >= 0.8.
+  Selected: states=27, training_agreement=0.8400
+======================================================================
+[GA-Original] Initialising Genetic Algorithm (mutation-only, no crossover)…
+[Init] Using shared init: 39 states, 1000 validation samples, 1000 training samples
+[GA-Init] Generating initial population of 10 individuals...
+[GA-Init] Initial DFA: 39 states, initial training agreement: 0.8240
+[GA-Init] Evaluating initial population
+
+[GA-Gen] Generation 1, evals: 11/100
+    [GA-Batch] Generated 10 neighbors
+  [GA-Gen] Min states: 35, Avg states: 37.5 [IMPROVED]
+
+[GA-Gen] Generation 2, evals: 21/100
+    [GA-Batch] Generated 10 neighbors
+  [GA-Gen] Min states: 35, Avg states: 36.6 (no improve: 1/10)
+
+[GA-Gen] Generation 3, evals: 31/100
+    [GA-Batch] Generated 10 neighbors
+  [GA-Gen] Min states: 33, Avg states: 35.7 [IMPROVED]
+
+[GA-Gen] Generation 4, evals: 41/100
+    [GA-Batch] Generated 10 neighbors
+  [GA-Gen] Min states: 32, Avg states: 34.0 [IMPROVED]
+
+[GA-Gen] Generation 5, evals: 51/100
+    [GA-Batch] Generated 10 neighbors
+  [GA-Gen] Min states: 31, Avg states: 32.5 [IMPROVED]
+
+[GA-Gen] Generation 6, evals: 61/100
+    [GA-Batch] Generated 10 neighbors
+  [GA-Gen] Min states: 30, Avg states: 31.6 (no improve: 1/10)
+
+[GA-Gen] Generation 7, evals: 71/100
+    [GA-Batch] Generated 10 neighbors
+  [GA-Gen] Min states: 30, Avg states: 31.0 [IMPROVED]
+
+[GA-Gen] Generation 8, evals: 81/100
+    [GA-Batch] Generated 10 neighbors
+  [GA-Gen] Min states: 29, Avg states: 29.9 [IMPROVED]
+
+[GA-Gen] Generation 9, evals: 91/100
+    [GA-Batch] Generated 9 neighbors
+  [GA-Gen] Min states: 28, Avg states: 29.1 [IMPROVED]
+
+[GA-Original] Completed 9 generations, 100 candidates total, final evals: 100/100
+
+[SELECT] select_by='agreement', agreement_threshold=0.8, state_threshold=5
+  Total candidates in history: 100
+  Initial states (from shared_init): 39
+  [agreement mode] 65 candidate(s) meet training_agreement >= 0.8.
+  Selected: states=28, training_agreement=0.8190
+======================================================================
+[PSO] Initialising Particle Swarm Optimisation (PSOAutomataOptimizer)…
+[Init] Using shared init: 39 states, 1000 validation samples, 1000 training samples
+    [GBEST UPDATE] New best: 39 states, agreement=0.8240, val_agr=1.0000, loss=0.1760
+[PSO Init] Initial DFA: 39 states, agreement=0.8240, val_agreement=1.0000
+[PSO Init] Iterative DFA refinement mode: each particle keeps a current DFA.
+
+[PSO] Starting optimization...
+  Initial DFA: 39 states, initial training agreement: 0.8240
+  Particles=5, candidate_pool_per_particle=5, iterations=3
+
+[PSO] Starting iterative DFA-level optimization...
+  Particles: 5
+  Candidate pool per particle: 5
+  Iterations: 3
+  Initial states: 39
+  Particle state: current DFA is carried to the next iteration
+    [GBEST UPDATE] iter=1 particle=0 candidate=3 New best: 38 states, agreement=0.8400, loss=0.1344
+    [GBEST UPDATE] iter=1 particle=4 candidate=1 New best: 36 states, agreement=0.8300, loss=0.0931
+    [GBEST UPDATE] iter=2 particle=4 candidate=0 New best: 35 states, agreement=0.8240, loss=0.0734
+    [GBEST UPDATE] iter=3 particle=4 candidate=2 New best: 34 states, agreement=0.8230, loss=0.0488
+
+[PSO] Finished optimization
+  Evaluations: 76/100
+  Best agreement: 0.8230
+  Best states: 34, val_agr=0.8550
+
+[PSO] Optimization completed successfully
+  Best states: 34
+  Best agreement: 0.8230
+  Best validation agreement: 0.8550
+  Best loss: 0.0488
+  [PSO] Evaluations used: 76 / 100
+
+[PSO] Total candidates collected: 76
+[PSO] Operator summary | evaluations=76/100
+  DELETE :    19 (25.33%)
+  MERGE  :    25 (33.33%)
+  DELTA  :    31 (41.33%)
+
+[SELECT] select_by='agreement', agreement_threshold=0.8, state_threshold=5
+  Total candidates in history: 76
+  Initial states (from shared_init): 39
+  [agreement mode] 68 candidate(s) meet training_agreement >= 0.8.
+  Selected: states=34, training_agreement=0.8230
+
+
+  SecureHandshake  (teacher_states=33  initial_states=39)
+
+  Initial (RPNI):  train=0.8240  validation=1.0000
+  ────────────────────────────────────────────────────────────────────────────────────────────────
+  | Method       | Train (Init→Final)   | Validation (Init→Final)  | States     | Time(s)    |
+  ────────────────────────────────────────────────────────────────────────────────────────────────
+  | BeamSearch   | 0.8240→0.8280 ✓      | 1.0000→0.9700            |         36 |        2.6 |
+  | SA           | 0.8240→0.8400 ✓      | 1.0000→0.9000            |         27 |       12.2 |
+  | GA           | 0.8240→0.8190 ✓      | 1.0000→0.8420            |         28 |       12.6 |
+  | PSO          | 0.8240→0.8230 ✓      | 1.0000→0.8550            |         34 |        5.7 |
+  ────────────────────────────────────────────────────────────────────────────────────────────────
+
+======================================================================
+  Experiment Parameters
+======================================================================
+  Selected automata: SecureHandshake
+
+  [SecureHandshake]
+    agreement_threshold: 0.8
+    batch_size: 1000
+    beam_size: 1
+    delta: 0.01
+    edit_distance: 7
+    init_num_samples: 1000
+    max_evaluations: 100
+    n_jobs: 4
+    num_test_instances: 5
+    parallel: True
+    prediction_cache_max_size: 200000
+    tau: 0.1
+    use_prediction_cache: True
+======================================================================
