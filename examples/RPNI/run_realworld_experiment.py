@@ -6,11 +6,21 @@ Beam / SA / GA / PSO logic lives in experiments.runner.
 """
 from __future__ import annotations
 
-import argparse
 import os
+import sys
+
+# Python's hash randomization (PYTHONHASHSEED) is enabled by default and
+# differs every process launch, which changes iteration order for any
+# string-keyed set()/dict() (alphabet symbols, state signatures, ...) --
+# random.seed(42) alone does NOT control this. Re-exec once with a pinned
+# seed so repeated runs of this script are bit-for-bit reproducible.
+if os.environ.get("PYTHONHASHSEED") != "0":
+    os.environ["PYTHONHASHSEED"] = "0"
+    os.execv(sys.executable, [sys.executable] + sys.argv)
+
+import argparse
 import pickle
 import random
-import sys
 import traceback
 
 import numpy as np
@@ -51,14 +61,10 @@ DEFAULT_LANGUAGE_CONFIGS = {
         use_prediction_cache=True,
         prediction_cache_max_size=200000,
         num_test_instances=10,
-        # test_instance=['R', 'R', 'R', 'R', 'D', 'D', 'L', 'D', 'D', 'L', 'D', 'D', 'D'],
         test_instance = ['R', 'R', 'R', 'R','D', 'D', 'L', 'D', 'D', 'L', 'D', 'D'],
         test_instances=None,
         max_length=20,
         embedding_dim=64,
-        hidden_dim=256,
-        num_layers=2,
-        dropout=0.3,
     ),
     "ECG": dict(
         alphabet=["VL", "L", "SL", "M", "SH", "H", "VH"],
@@ -78,9 +84,6 @@ DEFAULT_LANGUAGE_CONFIGS = {
         test_instances=None,
         max_length=20,
         embedding_dim=64,
-        hidden_dim=256,
-        num_layers=2,
-        dropout=0.3,
     ),
     "wafer": dict(
         alphabet=["VL", "L", "SL", "M", "SH", "H", "VH"],
@@ -100,9 +103,6 @@ DEFAULT_LANGUAGE_CONFIGS = {
         test_instances=None,
         max_length=20,
         embedding_dim=64,
-        hidden_dim=256,
-        num_layers=2,
-        dropout=0.3,
     ),
 }
 
@@ -117,6 +117,17 @@ def get_languages_config(overrides=None):
             for key, value in overrides.items():
                 if value is not None:
                     cfg[key] = value
+            # Every DEFAULT_LANGUAGE_CONFIGS entry pins a fixed test_instance,
+            # which get_test_instances always prefers over num_test_instances
+            # -- so passing --num_test_instances alone used to silently do
+            # nothing. Explicitly passing it on the CLI is a clear signal to
+            # actually use that many generated instances, so drop the fixed
+            # one(s) for this run only. DEFAULT_LANGUAGE_CONFIGS itself is
+            # untouched, so runs without --num_test_instances keep using the
+            # fixed instance exactly as before.
+            if overrides.get("num_test_instances") is not None:
+                cfg["test_instance"] = None
+                cfg["test_instances"] = None
     return configs
 
 
@@ -141,6 +152,28 @@ def get_test_instances(X_train, cfg):
         return [_normalize_sequence(cfg["test_instance"])]
     n = cfg.get("num_test_instances", 10)
     return [_normalize_sequence(seq) for seq in X_train[:n]]
+
+
+def _novel_test_accuracy(X_train, X_test, y_test, predict_fn):
+    """Test accuracy restricted to test sequences never seen in training.
+
+    The 4-direction stroke symbolization collapses distinct raw inputs (e.g.
+    different digit images) onto the same short symbol sequence, so a split
+    made before symbolizing can still leak identical post-symbolization
+    sequences across train/test -- inflating plain test accuracy with an
+    in-sample component for whatever fraction of the test set that overlaps.
+    Returns (novel_acc, n_novel, n_overlap); novel_acc is None if every test
+    sequence overlaps train.
+    """
+    train_seqs = {tuple(seq) for seq in X_train}
+    novel_idx = [i for i, seq in enumerate(X_test) if tuple(seq) not in train_seqs]
+    n_overlap = len(X_test) - len(novel_idx)
+    if not novel_idx:
+        return None, 0, n_overlap
+    X_novel = [X_test[i] for i in novel_idx]
+    y_novel = [y_test[i] for i in novel_idx]
+    novel_acc = accuracy_score(y_novel, predict_fn(X_novel))
+    return novel_acc, len(novel_idx), n_overlap
 
 
 def run_one_language(lang_code: str, cfg: dict, output_root: str) -> dict | None:
@@ -171,9 +204,29 @@ def run_one_language(lang_code: str, cfg: dict, output_root: str) -> dict | None
     clf.load(model_path)
     predict_fn = lambda seqs: clf.predict(seqs)
 
+    # load() rebuilds clf's model entirely from the checkpoint (max_len,
+    # embedding_dim, dropout, and — for RNN checkpoints — rnn_units/num_layers
+    # all get overwritten), so cfg's own copies of these are stale the moment
+    # load() returns. Record the checkpoint's real values back onto cfg so the
+    # "Experiment Parameters" dump at the end of main() logs the teacher that
+    # was actually loaded, not whatever DEFAULT_LANGUAGE_CONFIGS guessed.
+    cfg["max_length"] = clf.max_len
+    cfg["embedding_dim"] = clf.embedding_dim
+    cfg["dropout"] = clf.dropout
+    cfg["hidden_dim"] = getattr(clf, "rnn_units", None)
+    cfg["num_layers"] = getattr(clf, "num_layers", None)
+
     clf_train_acc = accuracy_score(y_train, predict_fn(X_train))
     clf_test_acc = accuracy_score(y_test, predict_fn(X_test))
+    clf_test_acc_novel, n_novel, n_overlap = _novel_test_accuracy(X_train, X_test, y_test, predict_fn)
     print(f"  Neural Network train={clf_train_acc:.4f}  test={clf_test_acc:.4f}")
+    if n_overlap:
+        novel_str = f"{clf_test_acc_novel:.4f}" if clf_test_acc_novel is not None else "N/A"
+        print(
+            f"    test set has {n_overlap}/{len(X_test)} sequences also present in "
+            f"train (symbolic encoding collapses distinct raw inputs onto the same "
+            f"short sequence) -- test accuracy on the {n_novel} novel sequences only: {novel_str}"
+        )
 
     test_instances = get_test_instances(X_train, cfg)
     print(f"  Selected test instances: {len(test_instances)}")
@@ -198,6 +251,7 @@ def run_one_language(lang_code: str, cfg: dict, output_root: str) -> dict | None
                     "teacher_type": "neural_classifier",
                     "clf_train_acc": float(clf_train_acc),
                     "clf_test_acc": float(clf_test_acc),
+                    "clf_test_acc_novel": (float(clf_test_acc_novel) if clf_test_acc_novel is not None else None),
                     "agreement_threshold": cfg.get("agreement_threshold"),
                 },
             )
@@ -227,29 +281,24 @@ def parse_args():
     parser.add_argument("--edit_distance", type=int, default=None)
     parser.add_argument("--max_evaluations", type=int, default=None)
     parser.add_argument("--num_test_instances", type=int, default=None)
+    parser.add_argument("--seed", type=int, default=None, help="Random seed for global RNG + DFASampler construction. Default: 42.")
     parser.add_argument("--parallel", dest="parallel", action="store_true", default=None, help="Enable parallel KL-LUCB sampling/agreement evaluation.")
     parser.add_argument("--no_parallel", dest="parallel", action="store_false", help="Disable parallel KL-LUCB sampling/agreement evaluation.")
     parser.add_argument("--n_jobs", type=int, default=None, help="Number of worker threads for KL-LUCB sampling/agreement evaluation.")
     parser.add_argument("--no_prediction_cache", dest="use_prediction_cache", action="store_false", default=None, help="Disable teacher prediction cache.")
     parser.add_argument("--prediction_cache_max_size", type=int, default=None, help="Maximum cached teacher predictions. Use 0 for unlimited.")
     parser.add_argument("--profile_time", dest="profile_time", action="store_true", default=None, help="Print a one-line profiling summary (time per search phase) after BeamSearch.")
-    parser.add_argument(
-        "--output_suffix",
-        type=str,
-        default="",
-        help=(
-            "Appended to the auto-derived output folder name "
-            "(test_result/realworld_{threshold}_{batch_size}{output_suffix}). "
-            "Use this to avoid colliding with an existing run when overriding "
-            "a parameter (e.g. --beam_size) that isn't part of the folder name."
-        ),
-    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    if args.seed is not None:
+        random.seed(args.seed)
+        np.random.seed(args.seed)
+        torch.manual_seed(args.seed)
     overrides = {
+        "seed": args.seed,
         "agreement_threshold": args.agreement_threshold,
         "delta": args.delta,
         "tau": args.tau,
@@ -280,15 +329,8 @@ def main() -> None:
     agreement_threshold = first_cfg["agreement_threshold"]
     batch_size = first_cfg["batch_size"]
     output_root = os.path.join(
-        PROJECT_ROOT, "test_result", f"realworld_{agreement_threshold}_{batch_size}{args.output_suffix}"
+        PROJECT_ROOT, "test_result", f"realworld_{agreement_threshold}_{batch_size}"
     )
-    if os.path.exists(output_root):
-        raise FileExistsError(
-            f"Output root already exists: {output_root}\n"
-            "Refusing to run into an existing results folder (would overwrite "
-            "prior results). Pass --output_suffix to pick a different folder, "
-            "or remove/move the existing one first if you intend to replace it."
-        )
     os.makedirs(output_root, exist_ok=True)
     log_path = os.path.join(output_root, "experiment_log.txt")
 

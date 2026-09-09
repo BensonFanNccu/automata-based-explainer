@@ -338,7 +338,16 @@ class AutomataBeamSearch:
                 worker_results.append((automaton, raw_data, labels, fut.result()))
         except Exception:
             # Fallback keeps the method usable when a candidate or automaton
-            # cannot be pickled cleanly for process-based scoring.
+            # cannot be pickled cleanly for process-based scoring. Reset
+            # worker_results first: if the try block failed partway through
+            # (some fut.result() calls already appended before one raised),
+            # this loop re-scores every automaton in automata_list from
+            # scratch, so leaving those partial entries in place would
+            # duplicate them -- worker_results would end up with N+k entries
+            # instead of N, which the shape-fixed `positives[idx] += ...`
+            # (and friends) below callers rely on would reject with a
+            # ValueError.
+            worker_results = []
             self._process_pool = None
             for automaton, (raw_data, labels) in zip(automata_list, sampled_batches):
                 stats = compute_acceptance_stats(
@@ -502,8 +511,6 @@ class AutomataBeamSearch:
         t = 1
         crit_a_idx = self.select_critical_arms(means, ub, lb, n_samples, delta, top_n, t)
         bound_gap = ub[crit_a_idx.ut] - lb[crit_a_idx.lt]
-        prev_gap = bound_gap
-        no_improvement_count = 0
 
         while bound_gap > epsilon and t < max_rounds:
             selected_automata = [automata_list[idx] for idx in crit_a_idx]
@@ -517,23 +524,7 @@ class AutomataBeamSearch:
 
             means = self._agreements_from_stats(init_stats)
             crit_a_idx = self.select_critical_arms(means, ub, lb, n_samples, delta, top_n, t)
-            new_gap = ub[crit_a_idx.ut] - lb[crit_a_idx.lt]
-
-            relative_improvement = (prev_gap - new_gap) / prev_gap if prev_gap > 0 else 0.0
-            if relative_improvement < 0.01:
-                no_improvement_count += 1
-                if no_improvement_count >= 10 and new_gap <= 2 * epsilon:
-                    if verbose:
-                        print(
-                            f"  [KL-LUCB] Early stop at round {t}: "
-                            f"B={new_gap:.6f}, eps={epsilon:.6f}"
-                        )
-                    break
-            else:
-                no_improvement_count = 0
-
-            prev_gap = new_gap
-            bound_gap = new_gap
+            bound_gap = ub[crit_a_idx.ut] - lb[crit_a_idx.lt]
             t += 1
 
         return np.argsort(means)[-top_n:]
@@ -608,11 +599,13 @@ class AutomataBeamSearch:
         reason: str,
         budget_used: int,
         init_automaton_time: float,
+        plot_stats_time: float,
         batch_size: int,
         output_dir: str,
         save_graphs: bool,
         collect_error_examples: bool,
         final_training_agreement: Optional[float] = None,
+        initial_training_agreement: Optional[float] = None,
     ) -> dict:
         initial_metadata = self.get_automata_metadata(
             origin_automaton,
@@ -621,6 +614,17 @@ class AutomataBeamSearch:
             is_final=True,
             collect_error_examples=False,
         )
+        if initial_training_agreement is not None:
+            # Same reasoning as final_training_agreement below: get_automata_metadata
+            # re-reads self.state's live, cumulative per-automaton counters, which
+            # for the origin automaton get overwritten wholesale at iteration 0
+            # (propose_automata recomputes them from all data drawn by then, not
+            # just the first batch) and can drift further if origin is resampled
+            # later (e.g. reused as a DELTA parent). Report the frozen agreement
+            # computed on the origin's first fixed batch instead -- the same value
+            # SharedInit hands SA/GA/PSO as their own "Init" -- so this row's Init
+            # is the same quantity as theirs.
+            initial_metadata["training_agreement"] = float(initial_training_agreement)
 
         remove_unreachable_states(final_automaton)
         if save_graphs:
@@ -674,6 +678,7 @@ class AutomataBeamSearch:
             "false_reject": final_metadata["false_reject"],
             "true_reject": final_metadata["true_reject"],
             "init_automaton_time": init_automaton_time,
+            "plot_stats_time": plot_stats_time,
         }
 
     # ------------------------------------------------------------------
@@ -718,6 +723,7 @@ class AutomataBeamSearch:
         threshold = 1.0 if agreement_threshold is None else agreement_threshold
 
         init_automaton_time = 0.0
+        plot_stats_time = 0.0
         self.iteration = 0
         self._init_state(batch_size)
 
@@ -785,6 +791,7 @@ class AutomataBeamSearch:
                     "false_reject": [],
                     "true_reject": [],
                     "init_automaton_time": 0.0,
+                    "plot_stats_time": 0.0,
                 }
 
             for candidate in discarded_candidates:
@@ -802,10 +809,12 @@ class AutomataBeamSearch:
         self.automatas = [origin_automaton]
 
         if save_graphs:
+            graphviz_start = time.perf_counter()
             try:
                 dfa_to_graphviz(origin_automaton, filename="initial_automata", output_dir=output_dir)
             except Exception as exc:
                 print(f"  [WARNING] Could not save initial DFA graph: {exc}")
+            init_automaton_time += time.perf_counter() - graphviz_start
 
         # Evaluate initial automaton once to populate state.
         (true_accept,), (true_reject,), (total,), (_accepted,) = self.draw_automata_samples(
@@ -1029,10 +1038,12 @@ class AutomataBeamSearch:
             )
 
         if save_plots and iteration_stats:
+            plot_start = time.perf_counter()
             try:
                 plot_beam_stats(iteration_stats, beam_size, output_dir=output_dir)
             except Exception as exc:
                 print(f"  [WARNING] Could not save beam plot: {exc}")
+            plot_stats_time = time.perf_counter() - plot_start
 
         # Algorithm 2, lines 19-28: final selection over the WHOLE search
         # history (every candidate scored across all iterations, not just the
@@ -1056,11 +1067,13 @@ class AutomataBeamSearch:
                     reason=reason,
                     budget_used=total_candidates_proposed,
                     init_automaton_time=init_automaton_time,
+                    plot_stats_time=plot_stats_time,
                     batch_size=batch_size,
                     output_dir=output_dir,
                     save_graphs=save_graphs,
                     collect_error_examples=collect_error_examples,
                     final_training_agreement=best["training_agreement"],
+                    initial_training_agreement=initial_agreement,
                 )
 
             best = max(all_history, key=lambda record: record["training_agreement"])
@@ -1075,11 +1088,13 @@ class AutomataBeamSearch:
                 reason=reason,
                 budget_used=total_candidates_proposed,
                 init_automaton_time=init_automaton_time,
+                plot_stats_time=plot_stats_time,
                 batch_size=batch_size,
                 output_dir=output_dir,
                 save_graphs=save_graphs,
                 collect_error_examples=collect_error_examples,
                 final_training_agreement=best["training_agreement"],
+                initial_training_agreement=initial_agreement,
             )
 
         return self._make_result(
@@ -1089,8 +1104,10 @@ class AutomataBeamSearch:
             reason="No candidates generated during beam search. Returning initial automaton.",
             budget_used=total_candidates_proposed if total_candidates_proposed > 0 else 1,
             init_automaton_time=init_automaton_time,
+            plot_stats_time=plot_stats_time,
             batch_size=batch_size,
             output_dir=output_dir,
             save_graphs=save_graphs,
             collect_error_examples=collect_error_examples,
+            initial_training_agreement=initial_agreement,
         )
