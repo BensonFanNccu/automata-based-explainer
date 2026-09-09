@@ -7,6 +7,7 @@
 - `review_learner.md`、`review_beam.md`、`review_experiments.md` 是 9 月 7 日三條審查線各自的原始報告，每一條 finding 的實測數據與驗證方式都在裡面。
 - `smoke_run/` 是在乾淨的 Python 3.11 環境裡照 README 與 RUNNING.md 實際執行的完整 log，包含兩次安裝嘗試與三次實驗執行。
 - `verification/` 是三條審查線用來實測的 Python 腳本，執行時需要另外取得 aalpy 與 numpy 的原始碼，各腳本開頭有說明。
+- `rerun_2026-09-09/` 是作者針對本報告做出修正之後（commit `2359c33`）的重新驗證，包含更新版報告 `UPDATE_REPORT.md`、完整重跑的 log、決定性驗證結果與實際執行的腳本。**想知道每一條發現目前的狀態，請先看這份更新版報告**，本 README 下半部的原始報告描述的是修正前的 commit `79d7a04`。
 
 ---
 

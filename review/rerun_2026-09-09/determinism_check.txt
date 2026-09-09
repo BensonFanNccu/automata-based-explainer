@@ -1,0 +1,7 @@
+# 決定性驗證：本次重跑 vs 作者附帶的參考結果
+
+比對方式：取出 experiment_log.txt 裡四個方法的 agreement 與 state 數欄位
+（排除執行時間與機器路徑），逐字比對。
+
+regular: 完全相同（12 列 agreement 與 state 數逐項一致）
+realworld: 完全相同（12 列 agreement 與 state 數逐項一致）
