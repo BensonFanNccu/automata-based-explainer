@@ -11,8 +11,11 @@ then call run_search_suite().
 """
 from __future__ import annotations
 
+import csv
+import glob
 import os
 import pickle
+import re
 import time
 from typing import Any, Callable, Dict, Iterable, Optional, Sequence
 
@@ -23,7 +26,63 @@ from learner.dfa_learner import DFALearner, DFASampler
 from baselines.search_baselines import SharedInit, ga_dfa_search, pso_dfa_search, sa_dfa_search
 
 
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 DEFAULT_METHODS = ("beam", "sa", "ga", "pso")
+
+
+_SA_CONFIG_RE = re.compile(r"pool=(\d+)")
+_GA_CONFIG_RE = re.compile(r"pop=(\d+)")
+_PSO_CONFIG_RE = re.compile(r"n_particles=(\d+),pool=(\d+),ops=(\d+)")
+
+
+def _find_latest_tuned_params_csv(search_root: Optional[str] = None) -> Optional[str]:
+    """Find the most recently written best_by_algo_cross_task.csv produced by
+    baselines.tune_baseline_params under test_result/tune_*/, if any."""
+    root = search_root or os.path.join(PROJECT_ROOT, "test_result")
+    matches = glob.glob(os.path.join(root, "tune_*", "best_by_algo_cross_task.csv"))
+    if not matches:
+        return None
+    return max(matches, key=os.path.getmtime)
+
+
+def _load_tuned_baseline_params(csv_path: Optional[str] = None) -> Dict[str, int]:
+    """Load cross-task-tuned SA/GA/PSO hyperparameters written by
+    tune_baseline_params.py's write_best_by_algo_cross_task_table(), if a
+    result is available. Returns {} (caller keeps its own hardcoded
+    defaults) when no tuned-params file exists -- tuning is optional, not a
+    prerequisite for running the main experiment.
+    """
+    path = csv_path or _find_latest_tuned_params_csv()
+    if not path or not os.path.isfile(path):
+        return {}
+
+    tuned: Dict[str, int] = {}
+    try:
+        with open(path, "r", newline="", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                algo = (row.get("algo") or "").upper()
+                config = row.get("config") or ""
+                if algo == "SA":
+                    m = _SA_CONFIG_RE.search(config)
+                    if m:
+                        tuned["sa_candidate_pool_size"] = int(m.group(1))
+                elif algo == "GA":
+                    m = _GA_CONFIG_RE.search(config)
+                    if m:
+                        tuned["ga_population_size"] = int(m.group(1))
+                elif algo == "PSO":
+                    m = _PSO_CONFIG_RE.search(config)
+                    if m:
+                        tuned["pso_particles"] = int(m.group(1))
+                        tuned["pso_candidate_pool_size"] = int(m.group(2))
+                        tuned["pso_max_ops_per_iteration"] = int(m.group(3))
+    except Exception as exc:
+        print(f"  [WARNING] Could not read tuned baseline params from {path}: {exc}")
+        return {}
+
+    if tuned:
+        print(f"  [Tuned params] Using {tuned} from {path}")
+    return tuned
 
 
 class NoInitialDFAError(RuntimeError):
@@ -241,6 +300,12 @@ def run_baseline(
         max_evaluations=cfg.get("max_evaluations"),
     )
 
+    # Cross-task-tuned SA/GA/PSO hyperparameters (baselines.tune_baseline_params
+    # output) are used by default when available; an explicit value in cfg
+    # still wins, and if no tuned-params file exists at all this falls back
+    # to the same hardcoded defaults as before.
+    tuned = _load_tuned_baseline_params(cfg.get("tuned_params_csv"))
+
     if method == "sa":
         fn = sa_dfa_search
         extra = dict(
@@ -248,21 +313,21 @@ def run_baseline(
             steps=cfg.get("sa_steps", 500),
             T_max=cfg.get("sa_t_max", 10.0),
             T_min=cfg.get("sa_t_min", 0.001),
-            sa_candidate_pool_size=cfg.get("sa_candidate_pool_size", 10),
+            sa_candidate_pool_size=cfg.get("sa_candidate_pool_size", tuned.get("sa_candidate_pool_size", 10)),
         )
     elif method == "ga":
         fn = ga_dfa_search
         extra = dict(
-            population_size=cfg.get("ga_population_size", 10),
+            population_size=cfg.get("ga_population_size", tuned.get("ga_population_size", 10)),
             tournament_size=cfg.get("ga_tournament_size", 2),
         )
     elif method == "pso":
         fn = pso_dfa_search
         extra = dict(
             beam_size=1,
-            n_particles=cfg.get("pso_particles", 5),
-            pso_max_ops_per_iteration=cfg.get("pso_max_ops_per_iteration", 1),
-            pso_candidate_pool_size=cfg.get("pso_candidate_pool_size", 5),
+            n_particles=cfg.get("pso_particles", tuned.get("pso_particles", 5)),
+            pso_max_ops_per_iteration=cfg.get("pso_max_ops_per_iteration", tuned.get("pso_max_ops_per_iteration", 1)),
+            pso_candidate_pool_size=cfg.get("pso_candidate_pool_size", tuned.get("pso_candidate_pool_size", 5)),
         )
     else:
         raise ValueError(f"Unknown method: {method}")
@@ -541,3 +606,87 @@ def print_suite_summary(results: Dict[str, dict]) -> None:
             continue
 
         _print_one_suite(str(result_key), suite_results)
+
+
+_INSTANCE_KEY_RE = re.compile(r"^(.*)_instance_\d+$")
+
+
+def print_averaged_summary(results: Dict[str, dict], methods: Iterable[str] = DEFAULT_METHODS) -> None:
+    """When run_one_automata()/run_one_language() ran more than one test
+    instance per task (--num_test_instances > 1), print one extra table per
+    task with mean +/- std across instances for each method. The per-instance
+    tables print_suite_summary() prints above only ever show single-instance
+    numbers -- nothing else aggregates them, so with N instances a reader has
+    to average N separate tables by hand to get a task-level number.
+
+    No-op for a single suite_results dict (nothing to average across) or a
+    dict where every task only ran one instance.
+    """
+    if not results or any(method in results for method in methods):
+        return  # single-suite Case 1 -- nothing to average across.
+
+    grouped: Dict[str, list] = {}
+    totals: Dict[str, int] = {}
+    for key, suite in results.items():
+        m = _INSTANCE_KEY_RE.match(str(key))
+        code = m.group(1) if m else str(key)
+        totals[code] = totals.get(code, 0) + 1
+        if isinstance(suite, dict) and any(meth in suite for meth in methods):
+            grouped.setdefault(code, []).append(suite)
+
+    if not any(total > 1 for total in totals.values()):
+        return  # every task ran exactly one instance -- nothing to average.
+
+    print("\n" + "=" * 80)
+    print("  Averaged across test instances")
+    print("=" * 80)
+
+    for code, total in sorted(totals.items()):
+        suites = grouped.get(code, [])
+        n = len(suites)
+        print(f"\n  {code}  (n={n}/{total} valid instance{'s' if total != 1 else ''})")
+        if total <= 1:
+            print("    (only one instance -- nothing to average)")
+            continue
+        if n == 0:
+            print("    (every instance failed or was skipped -- nothing to average)")
+            continue
+
+        print("  " + "-" * 96)
+        print(
+            f"  | {'Method':12s} | {'Train agr (mean±std)':22s} | "
+            f"{'Val agr (mean±std)':22s} | {'States (mean±std)':18s} | {'Time(s) mean':12s} |"
+        )
+        print("  " + "-" * 96)
+
+        for method in methods:
+            method_suites = [s for s in suites if s.get(method)]
+            label = METHOD_LABELS.get(method, method)
+            if not method_suites:
+                print(f"  | {label:12s} | {'N/A':22s} | {'N/A':22s} | {'N/A':18s} | {'N/A':12s} |")
+                continue
+
+            train_vals = [_scalar(s[method].get("train_agreement")) for s in method_suites]
+            val_vals = [_scalar(s[method].get("validation_agreement")) for s in method_suites]
+            state_vals = [float(_state_count(s[method].get("states"))) for s in method_suites]
+            time_vals = [_scalar(s[method].get("time")) for s in method_suites]
+
+            def _mean_std(xs: list) -> tuple:
+                mean = sum(xs) / len(xs)
+                var = sum((x - mean) ** 2 for x in xs) / len(xs)
+                return mean, var ** 0.5
+
+            train_m, train_s = _mean_std(train_vals)
+            val_m, val_s = _mean_std(val_vals)
+            state_m, state_s = _mean_std(state_vals)
+            time_m = sum(time_vals) / len(time_vals)
+
+            print(
+                f"  | {label:12s} | {f'{train_m:.4f}±{train_s:.4f}':22s} | "
+                f"{f'{val_m:.4f}±{val_s:.4f}':22s} | {f'{state_m:.2f}±{state_s:.2f}':18s} | {time_m:12.1f} |"
+            )
+
+        print("  " + "-" * 96)
+        n_skipped = total - n
+        if n_skipped:
+            print(f"    ({n_skipped}/{total} instance(s) failed or were skipped -- excluded from the average above)")
