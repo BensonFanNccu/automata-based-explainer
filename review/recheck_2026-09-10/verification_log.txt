@@ -1,0 +1,94 @@
+######## 第二次複驗實測記錄
+commit: 43bc43d fix: update caption in comparison figure to use dynamic batch size
+日期: Thu Sep 10 10:27:53 AM CST 2026
+
+######## 1. parse_results.py 是否不需手動搬移就能運作
+realworld_0.8_1000 (/home/fbi0826/automata-based-explainer/test_result/realworld_0.8_1000/experiment_log.txt): parsed 12 rows
+regular_0.8_1000 (/home/fbi0826/automata-based-explainer/test_result/regular_0.8_1000/experiment_log.txt): parsed 12 rows
+
+Wrote 24 rows -> /home/fbi0826/automata-based-explainer/analysis/summary_table.csv
+exit=0  產出列數: 25
+
+######## 2. make_plots.py 的 Unicode tau 修正
+--- 原始碼 caption ---
+238:tasks ($\\tau = {threshold}$).}}
+loaded 24 rows from /home/fbi0826/automata-based-explainer/analysis/summary_table.csv
+combo_tau08: done (+ .png)
+combo_tau09: skipped (combo_figure(tau=0.9): no BeamSearch row for ['DocumentReleaseWorkflow', 'MultiObligationOrder', 'SecureHandshake', 'ECG', 'mnist', 'wafer'])
+comparison: done (+ .png)
+
+2/3 figures written to /home/fbi0826/automata-based-explainer/analysis/plots
+
+######## 3. 調參結果自動載入：造一份探測用 CSV
+注意：目錄名是 tune_probe_test，不是預設的 tune_fairflow_baselines_*
+
+######## 4. 多 instance + 調參自動套用（同時驗證兩件事）
+  Selected test instances: 3
+  [MATA] Wrote 406 transitions to /home/fbi0826/automata-based-explainer/test_result/regular_0.8_300/SecureHandshake/instance_00/beam/dfa_explicit.mata
+  [Tuned params] Using {'sa_candidate_pool_size': 7, 'ga_population_size': 13, 'pso_particles': 9, 'pso_candidate_pool_size': 11, 'pso_max_ops_per_iteration': 3} from /home/fbi0826/automata-based-explainer/test_result/tune_probe_test/best_by_algo_cross_task.csv
+[SA] Running 15 steps with T_max=10.0, T_min=0.001, candidate_pool=7 (budget=100)
+  [Tuned params] Using {'sa_candidate_pool_size': 7, 'ga_population_size': 13, 'pso_particles': 9, 'pso_candidate_pool_size': 11, 'pso_max_ops_per_iteration': 3} from /home/fbi0826/automata-based-explainer/test_result/tune_probe_test/best_by_algo_cross_task.csv
+[GA-Gen] Generation 1, evals: 14/100
+  [Tuned params] Using {'sa_candidate_pool_size': 7, 'ga_population_size': 13, 'pso_particles': 9, 'pso_candidate_pool_size': 11, 'pso_max_ops_per_iteration': 3} from /home/fbi0826/automata-based-explainer/test_result/tune_probe_test/best_by_algo_cross_task.csv
+  [MATA] Wrote 266 transitions to /home/fbi0826/automata-based-explainer/test_result/regular_0.8_300/SecureHandshake/instance_01/beam/dfa_explicit.mata
+  [MATA] Wrote 259 transitions to /home/fbi0826/automata-based-explainer/test_result/regular_0.8_300/SecureHandshake/instance_01/beam/dfa_explicit.mata
+  [Tuned params] Using {'sa_candidate_pool_size': 7, 'ga_population_size': 13, 'pso_particles': 9, 'pso_candidate_pool_size': 11, 'pso_max_ops_per_iteration': 3} from /home/fbi0826/automata-based-explainer/test_result/tune_probe_test/best_by_algo_cross_task.csv
+[SA] Running 15 steps with T_max=10.0, T_min=0.001, candidate_pool=7 (budget=100)
+  [Tuned params] Using {'sa_candidate_pool_size': 7, 'ga_population_size': 13, 'pso_particles': 9, 'pso_candidate_pool_size': 11, 'pso_max_ops_per_iteration': 3} from /home/fbi0826/automata-based-explainer/test_result/tune_probe_test/best_by_algo_cross_task.csv
+[GA-Gen] Generation 1, evals: 14/100
+  [Tuned params] Using {'sa_candidate_pool_size': 7, 'ga_population_size': 13, 'pso_particles': 9, 'pso_candidate_pool_size': 11, 'pso_max_ops_per_iteration': 3} from /home/fbi0826/automata-based-explainer/test_result/tune_probe_test/best_by_algo_cross_task.csv
+  [MATA] Wrote 238 transitions to /home/fbi0826/automata-based-explainer/test_result/regular_0.8_300/SecureHandshake/instance_02/beam/dfa_explicit.mata
+  [MATA] Wrote 231 transitions to /home/fbi0826/automata-based-explainer/test_result/regular_0.8_300/SecureHandshake/instance_02/beam/dfa_explicit.mata
+  [Tuned params] Using {'sa_candidate_pool_size': 7, 'ga_population_size': 13, 'pso_particles': 9, 'pso_candidate_pool_size': 11, 'pso_max_ops_per_iteration': 3} from /home/fbi0826/automata-based-explainer/test_result/tune_probe_test/best_by_algo_cross_task.csv
+[SA] Running 15 steps with T_max=10.0, T_min=0.001, candidate_pool=7 (budget=100)
+  [Tuned params] Using {'sa_candidate_pool_size': 7, 'ga_population_size': 13, 'pso_particles': 9, 'pso_candidate_pool_size': 11, 'pso_max_ops_per_iteration': 3} from /home/fbi0826/automata-based-explainer/test_result/tune_probe_test/best_by_algo_cross_task.csv
+[GA-Gen] Generation 1, evals: 14/100
+--- 上面若無 'Averaged across' 一行，表示 print_averaged_summary 未被腳本呼叫 ---
+
+######## 5. 移除探測 CSV，確認預設路徑（與 2026-09-08 的同參數執行比對）
+  SecureHandshake  (teacher_states=33  initial_states=31)
+  Initial (RPNI):  train=0.8700  validation=1.0000
+  Beam evaluations used: 100  (SA/GA/PSO max_evaluations budget)
+  | Method       | Train (Init→Final)   | Validation (Init→Final)  | States     | Time(s)    |
+  | BeamSearch   | 0.8700→0.8980 ✓      | 1.0000→0.9860            |         30 |        1.3 |
+  | SA           | 0.8700→0.8250 ✓      | 1.0000→0.8450            |         16 |       13.1 |
+  | GA           | 0.8700→0.8350 ✓      | 1.0000→0.8680            |         20 |       13.2 |
+  | PSO          | 0.8700→0.8750 ✓      | 1.0000→0.9610            |         25 |        6.8 |
+--- 2026-09-08 同參數的結果：initial_states=31, init train=0.8700,
+    beam 0.8980/30, SA 0.8250/16, GA 0.8350/20, PSO 0.8750/25 ---
+
+######## 6. print_averaged_summary 的標準差是哪一種
+
+  Task  (n=3/3 valid instances)
+  ------------------------------------------------------------------------------------------------
+  | Method       | Train agr (mean±std)   | Val agr (mean±std)     | States (mean±std)  | Time(s) mean |
+  ------------------------------------------------------------------------------------------------
+  | BeamSearch   | 0.9000±0.0816          | 0.9000±0.0000          | 4.00±0.82          |         20.0 |
+  | SA           | N/A                    | N/A                    | N/A                | N/A          |
+  | GA           | N/A                    | N/A                    | N/A                | N/A          |
+  | PSO          | N/A                    | N/A                    | N/A                | N/A          |
+  ------------------------------------------------------------------------------------------------
+
+輸入 states = 3,4,5 -> mean=4.00
+population std (除以 n)   = 0.8165
+sample std     (除以 n-1) = 1.0000
+
+######## 7. 核心演算法檔案這次是否變動
+src/learner/dfa_learner.py: 沒有變動
+src/explainer/automata_beam.py: 沒有變動
+src/baselines/search_baselines.py: 沒有變動
+src/automaton/load_dfa.py: 沒有變動
+src/automaton/dfa_utils.py: 沒有變動
+
+######## 8. 參考結果是否套用過調參
+regular  參考 log 中 [Tuned params] 出現次數: 0
+realworld 參考 log 中 [Tuned params] 出現次數: 0
+test_result 進版控的檔案:
+test_result/realworld_0.8_1000/experiment_log.txt
+test_result/regular_0.8_1000/experiment_log.txt
+
+######## 9. 是否有停用自動載入的 CLI 旗標
+(沒有任何 tuned 相關旗標)
+
+######## 清理
+完成 Thu Sep 10 10:31:24 AM CST 2026
