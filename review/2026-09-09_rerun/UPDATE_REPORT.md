@@ -2,7 +2,7 @@
 
 日期：2026-09-09
 審查對象：commit `2359c33`（作者在原審查版本 `79d7a04` 之後推出的 36 個 commit）
-原始報告：[`../review_report.html`](../review_report.html)
+原始報告：[`../2026-09-07_initial/review_report.md`](../2026-09-07_initial/review_report.md)
 
 ---
 

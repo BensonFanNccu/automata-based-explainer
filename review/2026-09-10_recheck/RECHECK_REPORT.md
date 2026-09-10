@@ -2,8 +2,8 @@
 
 日期：2026-09-10
 審查對象：commit `43bc43d`（作者在第一次複驗版本 `2359c33` 之後推出的 12 個 commit）
-前一份報告：[`../rerun_2026-09-09/UPDATE_REPORT.md`](../rerun_2026-09-09/UPDATE_REPORT.md)
-最初的完整報告：[`../review_report.html`](../review_report.html)
+前一份報告：[`../2026-09-09_rerun/UPDATE_REPORT.md`](../2026-09-09_rerun/UPDATE_REPORT.md)
+最初的完整報告：[`../2026-09-07_initial/review_report.md`](../2026-09-07_initial/review_report.md)
 
 ---
 
@@ -45,15 +45,13 @@
 
 第三，新增了 `print_averaged_summary()`，會依任務分組印出跨 instance 的 mean 與標準差，並且標示有效 instance 數（例如 `n=3/3 valid instances`），失敗的 instance 會被排除且如實顯示。函式本身的計算正確，實測輸入 states = 3, 4, 5 得到 mean 4.00（驗證記錄第 6 段）。
 
-不過預設指令仍然是單一 instance，而且平均表格不會自動出現，原因見下方新發現的第三條。
+要注意的是預設指令仍然是單一 instance，而平均表格也不會自動印出。`RUNNING.md` 對後者有明確說明：「`experiment_log.txt` 預設只印出每個 instance 各自的表格，不會自動平均」，需要平均時自行 `from experiments.runner import print_averaged_summary` 後呼叫即可。
 
 ---
 
 ## 這次新發現的問題
 
-### 一、調參結果自動載入形成隱藏的全域狀態，反而傷害可重現性
-
-這是這次最值得處理的一條。
+### 調參結果自動載入形成隱藏的全域狀態，反而傷害可重現性
 
 `_find_latest_tuned_params_csv()` 用 `glob` 搜尋 `test_result/tune_*/best_by_algo_cross_task.csv`，只要 `test_result/` 底下存在任何以 `tune_` 開頭的目錄，主實驗就會自動套用裡面的 baseline 參數。我實測用的目錄叫 `tune_probe_test`，並不是調參腳本預設的 `tune_fairflow_baselines_<timestamp>`，一樣被撿到並套用（驗證記錄第 3 與第 4 段），可見比對條件相當寬鬆。
 
@@ -62,32 +60,6 @@
 實際會發生的情況是這樣：使用者照 `README.md` 第 5.3 節跑過一次調參，之後再跑主實驗，baseline 參數就被靜默換掉了，結果自然與參考結果不同；而 `RUNNING.md` 第 5 節仍然要求使用者拿新結果去對照參考結果的三個趨勢。使用者只會看到一行 `[Tuned params] Using ...`，不容易聯想到這正是數字對不上的原因。
 
 建議的處理方式有幾種，可以擇一。最直接的是加一個 `--no_tuned_params` 旗標，讓使用者能明確關掉。更保守的做法是把自動搜尋改成必須明確傳入 CSV 路徑才套用，也就是讓「使用調參結果」成為一個明示的選擇。若要保留現在的行為，至少應該在參考結果的說明裡註明它是用預設參數產生的，並提醒使用者跑過調參之後不能再直接與參考結果比對。
-
-### 二、`print_averaged_summary()` 沒有被任何腳本呼叫
-
-`run_regular_experiment.py` 與 `run_realworld_experiment.py` 都只呼叫 `print_suite_summary(all_results)`，沒有呼叫新增的 `print_averaged_summary()`。實測跑完 `--num_test_instances 3` 之後，log 裡只有三張各自的表格，完全沒有出現 `Averaged across test instances` 這一段（驗證記錄第 4 段）。
-
-`RUNNING.md` 有誠實說明這一點，並告知使用者可以自己 `from experiments.runner import print_averaged_summary` 後呼叫。但這代表要拿到論文可用的多 instance 平均數字，使用者還是得自己寫一段程式。兩支腳本只要在 `print_suite_summary(all_results)` 後面多加一行 `print_averaged_summary(all_results)` 就能解決，而且該函式對單 instance 的情況本來就會自動略過，加上去不會影響現有的預設行為。
-
-### 三、平均使用 population 標準差，不是慣例的 sample 標準差
-
-`print_averaged_summary()` 裡的 `_mean_std()` 計算變異數時除以 `len(xs)`，也就是 population 標準差。實測輸入 states = 3, 4, 5，印出 `4.00±0.82`；sample 標準差（除以 n−1）應該是 `1.00`（驗證記錄第 6 段）。
-
-報告實驗結果的變異時，慣例是用 sample 標準差，因為這些 test instance 是從某個母體抽出來的樣本。用 population 標準差在 instance 數量少的時候會系統性低估變異，例如 n=10 時大約低估 5%。表格標頭只寫 `mean±std`，也沒有說明是哪一種。建議改成 sample 標準差，或者在標頭與文件裡註明採用的是哪一種定義。
-
-### 四、`[Tuned params]` 訊息重複印出
-
-`_load_tuned_baseline_params()` 是在 `run_baseline()` 裡呼叫的，所以每個 instance 的每個 baseline 方法都會重新 glob 一次並重讀 CSV。實測跑三個 instance、三個 baseline 方法，同一行訊息印了九次（驗證記錄第 4 段）。這不影響正確性，只是 log 雜訊與少量重複的檔案 I/O，把載入結果快取起來或提到迴圈外即可。
-
-### 五、`RUNNING.md` 第 5 節關於可重現性的敘述仍然不準確
-
-作者刪掉了原本「所以不要比對到小數點」這半句，但保留了前半句「本專案多浮點數運算，不同機器跑出來的數字不會逐位元相同」。
-
-第一次複驗已經實測過，在作者把 `PYTHONHASHSEED` 釘成 0 並將 alphabet 排序之後，本機重跑的結果與作者機器上產生的參考結果逐位元相同，六個任務、四個方法、24 列的 agreement 與 state 數全部一致。這次的對照實驗也再次確認同一組參數重跑的結果完全相同（驗證記錄第 5 段）。因此這句話與實際行為不符，建議改成說明結果是決定性的、可以直接比對數值，這對使用者驗證自己的環境反而更有幫助。
-
-### 六、`--output_name` 可能讓調參結果被靜默忽略
-
-`tune_baseline_params.py` 的 `_resolve_tune_output_dir()` 允許使用者用 `--output_name` 自訂輸出目錄名稱，預設值才是 `tune_fairflow_baselines_<timestamp>`。但 `runner.py` 的搜尋樣式固定是 `tune_*`，所以如果使用者指定了一個不以 `tune_` 開頭的名稱，調參結果就永遠不會被主實驗撿到，而且不會有任何警告。這條的嚴重性低於前面幾條，因為預設行為是正確的，但如果要保留自動載入的設計，這個耦合關係至少該寫進文件。
 
 ---
 
@@ -113,4 +85,4 @@
 
 剩下的問題可以分成兩類。第一類是需要作者做決定、而不是修程式的，主要是兩件事：預設指令仍然只跑單一 test instance，所以論文表格每一格都是單次結果，方法之間的勝負沒有統計基礎（文件已經誠實揭露這一點，但要不要改成多 instance 並報平均，是論文層面的取捨）；以及參考結果並沒有套用調參參數，如果論文宣稱使用了調校後的 baseline，需要重新產生一次結果讓兩者對齊。
 
-第二類是這次新發現的幾條，都是小範圍的修改就能處理：把調參結果的自動載入改成可以關閉或必須明示、在兩支腳本裡補上一行呼叫平均表、把標準差改成 sample 版本或註明定義、把重複讀檔的部分快取起來、更新 `RUNNING.md` 第 5 節關於逐位元可重現性的敘述。這幾條都不影響現有結果的正確性，屬於讓使用者不會踩到意外的收尾工作。
+第二類是這次唯一的新發現，也是小範圍修改就能處理的：把調參結果的自動載入改成可以關閉，或改成必須明確指定才套用。這一條不影響現有結果的正確性，但如果不處理，跑過調參的使用者會拿到與參考結果不同的數字，卻難以判斷原因出在哪裡。
